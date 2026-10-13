@@ -9,6 +9,8 @@ Mineradio 的独立修改版本，聚焦桌面粒子视觉、桌面歌词、托�
 - 托盘播放控制
 - 原生 D3D11 桌面壁纸渲染器
 - 平台歌单导入与节拍缓存策略
+- <img width="1611" height="948" alt="image" src="https://github.com/user-attachments/assets/908fa3b8-8542-4c6f-bbc7-b49dc59c020c" />
+
 
 ## 本地运行
 
