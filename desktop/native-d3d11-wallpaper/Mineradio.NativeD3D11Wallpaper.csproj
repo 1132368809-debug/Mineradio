@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Mineradio.NativeD3D11Wallpaper</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="3.*" />
+    <PackageReference Include="Vortice.DirectComposition" Version="3.*" />
+    <PackageReference Include="Vortice.DXGI" Version="3.*" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.*" />
+    <PackageReference Include="Vortice.Mathematics" Version="2.*" />
+  </ItemGroup>
+</Project>

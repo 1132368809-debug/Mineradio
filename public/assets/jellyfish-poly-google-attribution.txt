@@ -1,0 +1,8 @@
+﻿Jellyfish 3D model source used for point-cloud reference:
+- Title: Jellyfish
+- Creator: Poly by Google
+- Source: https://poly.pizza/m/dA5osnS0Rzj
+- Asset URL observed on source page: https://static.poly.pizza/5025e994-da02-45bc-9b98-fde96366b0ca.glb
+- License: Creative Commons Attribution 3.0 (CC-BY 3.0)
+- License URL: https://creativecommons.org/licenses/by/3.0/
+- Downloaded for Mineradio jellyfish particle preset as a derived point-cloud reference.

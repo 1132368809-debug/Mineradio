@@ -1,0 +1,27 @@
+{
+  "source": "https://poly.pizza/m/dA5osnS0Rzj",
+  "license": "CC-BY 3.0",
+  "creator": "Poly by Google",
+  "input": "jellyfish-poly-google.glb",
+  "output": "jellyfish-poly-google-points.bin",
+  "points": 42000,
+  "float32Stride": 5,
+  "meshVertices": 6041,
+  "meshTriangles": 3704,
+  "bboxMin": [
+    -141.71600341796875,
+    -312.7869873046875,
+    -113.71399688720703
+  ],
+  "bboxMax": [
+    141.71600341796875,
+    98.16539764404297,
+    109.76799774169922
+  ],
+  "dims": [
+    283.4320068359375,
+    410.95238494873047,
+    223.48199462890625
+  ],
+  "normalizedScale": 0.00686210885563255
+}

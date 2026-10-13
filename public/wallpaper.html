@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mineradio Wallpaper</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+    #wall-bg{display:none;position:absolute;inset:0;z-index:0;background:transparent;pointer-events:none}
+    #wall-bg::after{content:"";display:none}
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1}
+    #fallback{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:1}
+    #wall-lyrics{position:absolute;z-index:2;left:50%;bottom:8.5vh;transform:translateX(-50%) translateY(8px) scale(.985);max-width:min(78vw,1180px);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;font-size:clamp(30px,4.2vw,74px);font-weight:900;line-height:1.18;text-align:center;letter-spacing:0;color:rgba(255,255,255,.92);pointer-events:none;opacity:0;transition:opacity .18s ease;filter:drop-shadow(0 10px 36px rgba(0,0,0,.36))}
+    #wall-lyrics.show{opacity:var(--lyric-alpha,.92);transform:translateX(-50%) translateY(0) scale(var(--lyric-scale,1))}
+    #wall-lyrics .wall-lyric-fill{display:inline;background:linear-gradient(90deg,var(--lyric-hi,#fff0b8) 0 var(--lyric-progress,0%),var(--lyric-base,rgba(255,255,255,.82)) var(--lyric-progress,0%) 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 calc(18px + var(--lyric-glow,0)*22px) var(--lyric-glow-color,rgba(156,255,223,.52)),0 3px 18px rgba(0,0,0,.34)}
+  </style>
+</head>
+<body>
+  <div id="wall-bg" aria-hidden="true"></div>
+  <canvas id="wall"></canvas>
+  <canvas id="fallback"></canvas>
+  <div id="wall-lyrics" aria-hidden="true"><span class="wall-lyric-fill"></span></div>
+  <script src="vendor/three.r128.min.js"></script>
+  <script>
+    'use strict';
+
+    var canvas = document.getElementById('wall');
+    var bgEl = document.getElementById('wall-bg');
+    var fallback = document.getElementById('fallback');
+    var lyricEl = document.getElementById('wall-lyrics');
+    var lyricFill = lyricEl ? lyricEl.querySelector('.wall-lyric-fill') : null;
+    var fctx = fallback.getContext('2d', { alpha:true });
+    var state = {
+      enabled:false,title:'Mineradio',artist:'',cover:'',texture:'',textureType:'',playing:false,preset:5,opacity:1,
+      lyric:{ enabled:true,text:'Mineradio',progress:0,progressSpan:4.8 },
+      motion:{ bass:0.16, mid:0.10, treble:0.12, beat:0.08, energy:0.14 },
+      visual:{ intensity:1, point:1, depth:1, speed:1, bloomStrength:.35, scatter:.08 },
+      colors:{primary:'#d6f8ff',secondary:'#9cffdf',highlight:'#fff0b8',glow:'#9cffdf'}
+    };
+
+    var renderer = null;
+    var scene = null;
+    var camera = null;
+    var points = null;
+    var glowPoints = null;
+    var uniforms = null;
+    var coverTexture = null;
+    var coverSrc = '';
+    var coverVideo = null;
+    var lastNow = performance.now();
+    var lastRenderAt = 0;
+    var smoothMotion = { bass:0, mid:0, treble:0, beat:0, energy:0 };
+    var hasWebgl = !!window.THREE;
+
+    function clamp(v, lo, hi) {
+      v = Number(v);
+      if (!isFinite(v)) v = lo;
+      return Math.max(lo, Math.min(hi, v));
+    }
+    function hexToRgb(hex, fallback){
+      hex = String(hex || fallback || '#9cffdf').trim();
+      if (/^#[0-9a-f]{3}$/i.test(hex)) hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+      if (!/^#[0-9a-f]{6}$/i.test(hex)) hex = fallback || '#9cffdf';
+      return { r:parseInt(hex.slice(1,3),16) / 255, g:parseInt(hex.slice(3,5),16) / 255, b:parseInt(hex.slice(5,7),16) / 255 };
+    }
+    function cssRgba(hex, a){
+      var c = hexToRgb(hex);
+      return 'rgba(' + Math.round(c.r * 255) + ',' + Math.round(c.g * 255) + ',' + Math.round(c.b * 255) + ',' + a + ')';
+    }
+    function cssUrl(src) {
+      return 'url("' + String(src || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
+    }
+    function rand(seed){ return Math.abs(Math.sin(seed * 3187.917) * 43758.5453) % 1; }
+    function colorVec(hex, fallback) {
+      var c = hexToRgb(hex, fallback);
+      return new THREE.Color(c.r, c.g, c.b);
+    }
+
+    function makeFallbackTexture() {
+      var c = document.createElement('canvas');
+      c.width = c.height = 256;
+      var ctx = c.getContext('2d');
+      var colors = state.colors || {};
+      var g = ctx.createLinearGradient(0, 0, 256, 256);
+      g.addColorStop(0, colors.primary || '#d6f8ff');
+      g.addColorStop(.52, colors.secondary || '#9cffdf');
+      g.addColorStop(1, colors.highlight || '#fff0b8');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,256,256);
+      ctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < 46; i++) {
+        var x = rand(i + 2) * 256;
+        var y = rand(i * 5 + 7) * 256;
+        var r = 12 + rand(i * 9 + 1) * 44;
+        var a = .04 + rand(i * 3) * .10;
+        var rg = ctx.createRadialGradient(x,y,0,x,y,r);
+        rg.addColorStop(0, cssRgba(colors.highlight || '#fff0b8', a));
+        rg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = rg;
+        ctx.fillRect(x-r,y-r,r*2,r*2);
+      }
+      var tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      return tex;
+    }
+
+    function buildParticleGeometry(cols, rows) {
+      var count = cols * rows;
+      var positions = new Float32Array(count * 3);
+      var uvs = new Float32Array(count * 2);
+      var rands = new Float32Array(count * 4);
+      var k = 0, u = 0, r = 0;
+      for (var y = 0; y < rows; y++) {
+        for (var x = 0; x < cols; x++) {
+          var id = y * cols + x + 1;
+          var px = cols <= 1 ? .5 : x / (cols - 1);
+          var py = rows <= 1 ? .5 : y / (rows - 1);
+          positions[k++] = px - .5;
+          positions[k++] = .5 - py;
+          positions[k++] = 0;
+          uvs[u++] = px;
+          uvs[u++] = 1 - py;
+          rands[r++] = rand(id * 1.7);
+          rands[r++] = rand(id * 3.1);
+          rands[r++] = rand(id * 5.3);
+          rands[r++] = rand(id * 8.9);
+        }
+      }
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('aUv', new THREE.BufferAttribute(uvs, 2));
+      geo.setAttribute('aRand', new THREE.BufferAttribute(rands, 4));
+      return geo;
+    }
+
+    var vertexShader = [
+      'attribute vec2 aUv;',
+      'attribute vec4 aRand;',
+      'uniform float uTime;',
+      'uniform float uAspect;',
+      'uniform float uOpacity;',
+      'uniform float uPlaying;',
+      'uniform vec4 uMotion;',
+      'uniform float uPreset;',
+      'uniform float uIntensity;',
+      'uniform float uPointScale;',
+      'uniform float uDepth;',
+      'uniform float uSpeed;',
+      'uniform float uBloom;',
+      'uniform float uScatter;',
+      'varying vec2 vUv;',
+      'varying vec4 vRand;',
+      'varying float vPulse;',
+      'varying float vAlpha;',
+      'varying float vShape;',
+      'void main(){',
+      '  vUv = aUv;',
+      '  vRand = aRand;',
+      '  float bass = uMotion.x;',
+      '  float mid = uMotion.y;',
+      '  float treble = uMotion.z;',
+      '  float beat = uMotion.w;',
+      '  vec2 uv = aUv - 0.5;',
+      '  float speed = max(0.18, uSpeed);',
+      '  float preset = floor(uPreset + 0.5);',
+      '  float coverScale = 3.00 + bass * 0.38;',
+      '  vec3 p = vec3(uv.x * coverScale * uAspect, uv.y * coverScale, 0.0);',
+      '  vAlpha = 1.0;',
+      '  vShape = preset;',
+      '  float t = uTime * speed;',
+      '  float wave = sin((uv.x * 7.0 + uv.y * 4.0) + t * (0.62 + aRand.x * 0.38));',
+      '  float ripple = sin(length(uv) * 18.0 - t * 1.9 + aRand.y * 4.0);',
+      '  if (preset < 0.5) {',
+      '    p.z += wave * (0.20 + mid * 0.54) + ripple * beat * 0.44 + bass * (0.22 + aRand.z * 0.46);',
+      '    p.xy += normalize(uv + 0.0001) * (bass * 0.07 + beat * 0.045);',
+      '  } else if (preset < 1.5) {',
+      '    float theta = aUv.x * 6.28318 + t * (0.42 + mid * 0.55);',
+      '    float z = fract(aUv.y + t * 0.075 + aRand.z * 0.08) * 7.4 - 3.7;',
+      '    float radius = 1.12 + sin(aUv.y * 26.0 + t * 2.0) * 0.16 + bass * 0.28;',
+      '    p = vec3(cos(theta) * radius * uAspect, sin(theta) * radius, z);',
+      '    vAlpha = 0.72 + smoothstep(-3.7, 1.2, z) * 0.34;',
+      '  } else if (preset < 2.5) {',
+      '    float theta = aUv.x * 6.28318 + t * 0.22;',
+      '    float phi = aUv.y * 3.14159;',
+      '    float radius = 1.72 + bass * 0.22 + sin(theta * 5.0 + t) * treble * 0.12;',
+      '    p = vec3(cos(theta) * sin(phi) * radius * uAspect, cos(phi) * radius, sin(theta) * sin(phi) * radius);',
+      '    if (aRand.w > 0.72) p.xy *= 1.42 + aRand.z * 0.86;',
+      '  } else if (preset < 3.5) {',
+      '    float theta = aRand.x * 6.28318;',
+      '    float radius = 0.8 + aRand.y * 5.8;',
+      '    p = vec3(cos(theta) * radius * uAspect, sin(theta) * radius * 0.62, -3.8 + aRand.z * 4.2);',
+      '    vAlpha = 0.14 + aRand.w * 0.28;',
+      '  } else if (preset < 4.5) {',
+      '    float theta = aUv.x * 6.28318 + t * (0.26 + mid * 0.12);',
+      '    float radius = 0.35 + pow(aUv.y, 0.62) * (2.15 + bass * 0.10);',
+      '    p = vec3(cos(theta) * radius * uAspect, sin(theta) * radius, sin(radius * 34.0 + t) * 0.025);',
+      '    vAlpha = 0.52 + smoothstep(1.82, 2.42, radius) * 0.78;',
+      '  } else if (preset < 5.5) {',
+      '    float theta = aRand.y * 6.28318 + t * (0.035 + aRand.x * 0.055);',
+      '    float radius = 0.34 + pow(aRand.z, 0.45) * (4.4 + bass * 0.62);',
+      '    float arm = sin(theta * 2.4 + radius * 1.35 - t * 0.55);',
+      '    radius += arm * (0.26 + mid * 0.36);',
+      '    p = vec3(cos(theta) * radius * uAspect, sin(theta) * radius * 0.62, -3.0 + aRand.x * 3.8);',
+      '    vAlpha = 0.42 + aRand.w * 0.88;',
+      '  } else if (preset < 6.5) {',
+      '    float sx = uv.x * 2.15;',
+      '    float sy = uv.y * 2.85 + 0.22;',
+      '    float skull = smoothstep(1.15, 0.76, sx*sx + sy*sy*0.82);',
+      '    float jaw = smoothstep(0.82, 0.18, abs(sx)) * smoothstep(-1.45, -0.18, sy) * smoothstep(-2.20, -1.12, sy);',
+      '    p = vec3(sx * 1.05 * uAspect, sy * 1.05, (aRand.z - 0.5) * 0.75 + bass * 0.18);',
+      '    vAlpha = max(skull, jaw) * (0.38 + aRand.w * 0.78);',
+      '  } else {',
+      '    float group = floor(aRand.x * 6.0);',
+      '    float gx = (group - 2.5) * 1.08 + sin(group * 1.7) * 0.35;',
+      '    float gy = sin(group * 2.1) * 0.62 - 0.18;',
+      '    float localX = uv.x * 2.0;',
+      '    float down = aUv.y;',
+      '    float dome = smoothstep(0.54, 1.0, down);',
+      '    float strand = 1.0 - dome;',
+      '    float capR = sqrt(max(0.0, 1.0 - localX * localX));',
+      '    vec2 cap = vec2(localX * 0.72, 0.42 + capR * 0.72 - (1.0 - down) * 0.28);',
+      '    float strandId = floor(aUv.x * 34.0);',
+      '    float sway = sin(down * 8.5 + t * 1.45 + strandId * 0.58) * (0.12 + mid * 0.34);',
+      '    vec2 tent = vec2((aUv.x - 0.5) * 1.35 + sway, 0.34 - down * (2.38 + aRand.z * 1.05));',
+      '    p = vec3(mix(tent, cap, dome), (aRand.z - 0.5) * (0.62 + uDepth * 0.45));',
+      '    p.xy += vec2(gx, gy);',
+      '    p *= 0.82 + aRand.y * 0.32;',
+      '    p.y += sin(t * 0.52 + group) * 0.20 + bass * 0.12;',
+      '    vAlpha = 0.44 + dome * 0.42 + strand * 0.18;',
+      '  }',
+      '  p.z *= uDepth;',
+      '  p.xy += vec2(sin(t * 0.17 + aRand.y * 7.0), cos(t * 0.13 + aRand.x * 7.0)) * (0.035 + uScatter * 0.42);',
+      '  vec4 mv = modelViewMatrix * vec4(p, 1.0);',
+      '  float depthFade = clamp(1.0 + mv.z * 0.055, 0.42, 1.28);',
+      '  vPulse = clamp(bass * 0.70 + mid * 0.32 + treble * 0.22 + beat * 0.95, 0.0, 1.9);',
+      '  gl_PointSize = (3.2 + aRand.w * 5.2 + vPulse * 6.4 + uBloom * 2.0) * uOpacity * depthFade * uPointScale * (0.82 + uIntensity * 0.28);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}'
+    ].join('\n');
+
+    var fragmentShader = [
+      'precision highp float;',
+      'uniform sampler2D uCover;',
+      'uniform vec3 uPrimary;',
+      'uniform vec3 uSecondary;',
+      'uniform vec3 uHighlight;',
+      'uniform vec3 uGlow;',
+      'uniform float uOpacity;',
+      'uniform vec4 uMotion;',
+      'uniform float uIntensity;',
+      'uniform float uBloom;',
+      'varying vec2 vUv;',
+      'varying vec4 vRand;',
+      'varying float vPulse;',
+      'varying float vAlpha;',
+      'varying float vShape;',
+      'void main(){',
+      '  vec2 pc = gl_PointCoord - 0.5;',
+      '  float d = dot(pc, pc);',
+      '  float alpha = smoothstep(0.25, 0.02, d);',
+      '  vec3 cover = texture2D(uCover, vUv).rgb;',
+      '  float lum = dot(cover, vec3(0.299, 0.587, 0.114));',
+      '  vec3 tint = mix(uSecondary, uPrimary, vRand.x);',
+      '  vec3 col = mix(tint, cover, 0.64 + lum * 0.22);',
+      '  if (vShape > 0.5 && vShape < 1.5) col = mix(uPrimary, uGlow, 0.56 + vRand.y * 0.24);',
+      '  if (vShape > 2.5 && vShape < 3.5) col *= 0.52;',
+      '  if (vShape > 3.5 && vShape < 4.5) col = mix(vec3(0.08), cover + uHighlight * 0.34, 0.68 + lum * 0.18);',
+      '  if (vShape > 5.5 && vShape < 6.5) col = mix(uPrimary, uHighlight, 0.22 + vRand.z * 0.35);',
+      '  if (vShape > 6.5) col = mix(uPrimary, mix(uGlow, uHighlight, vRand.z), 0.46 + vRand.y * 0.34);',
+      '  col = mix(col, uHighlight, smoothstep(0.55, 1.35, vPulse) * 0.30);',
+      '  col += uGlow * (0.14 + uMotion.w * 0.20 + uMotion.z * 0.13 + uBloom * 0.18);',
+      '  float pointAlpha = alpha * vAlpha * (0.58 + lum * 0.82 + vPulse * 0.48 + uBloom * 0.18) * uOpacity * (0.82 + uIntensity * 0.32);',
+      '  gl_FragColor = vec4(col, pointAlpha);',
+      '}'
+    ].join('\n');
+
+    function initThree() {
+      if (!hasWebgl) return false;
+      try {
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias:false, alpha:true, premultipliedAlpha:false, powerPreference:'low-power' });
+        renderer.setClearColor(0x000000, 0);
+        renderer.setPixelRatio(1);
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+        camera.position.z = 7.2;
+        coverTexture = makeFallbackTexture();
+        uniforms = {
+          uTime:{ value:0 },
+          uAspect:{ value:1 },
+          uOpacity:{ value:1 },
+          uPlaying:{ value:0 },
+          uPreset:{ value:5 },
+          uIntensity:{ value:1 },
+          uPointScale:{ value:1 },
+          uDepth:{ value:1 },
+          uSpeed:{ value:1 },
+          uBloom:{ value:.35 },
+          uScatter:{ value:.08 },
+          uMotion:{ value:new THREE.Vector4(0,0,0,0) },
+          uCover:{ value:coverTexture },
+          uPrimary:{ value:colorVec('#d6f8ff') },
+          uSecondary:{ value:colorVec('#9cffdf') },
+          uHighlight:{ value:colorVec('#fff0b8') },
+          uGlow:{ value:colorVec('#9cffdf') }
+        };
+        var geo = buildParticleGeometry(104, 60);
+        var mat = new THREE.ShaderMaterial({
+          uniforms: uniforms,
+          vertexShader: vertexShader,
+          fragmentShader: fragmentShader,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        points = new THREE.Points(geo, mat);
+        scene.add(points);
+
+        var glowMat = mat.clone();
+        glowMat.uniforms = Object.assign({}, uniforms, { uOpacity:{ value:0.38 } });
+        glowPoints = new THREE.Points(geo, glowMat);
+        glowPoints.scale.setScalar(1.03);
+        scene.add(glowPoints);
+        resize();
+        return true;
+      } catch (e) {
+        console.warn('Wallpaper WebGL init failed:', e);
+        hasWebgl = false;
+        return false;
+      }
+    }
+
+    function resize(){
+      var w = Math.max(1, innerWidth);
+      var h = Math.max(1, innerHeight);
+      fallback.width = Math.floor(w * Math.min(1.25, window.devicePixelRatio || 1));
+      fallback.height = Math.floor(h * Math.min(1.25, window.devicePixelRatio || 1));
+      fallback.style.width = w + 'px';
+      fallback.style.height = h + 'px';
+      if (renderer && camera && uniforms) {
+        renderer.setPixelRatio(1);
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        uniforms.uAspect.value = w / h;
+      }
+    }
+
+    function disposeCoverMedia() {
+      if (coverVideo) {
+        try { coverVideo.pause(); } catch (e) {}
+        coverVideo.removeAttribute('src');
+        try { coverVideo.load(); } catch (e) {}
+      }
+      coverVideo = null;
+    }
+
+    function useFallbackCoverTexture() {
+      if (!uniforms) return;
+      var tex = makeFallbackTexture();
+      if (coverTexture && coverTexture.dispose) coverTexture.dispose();
+      coverTexture = tex;
+      uniforms.uCover.value = tex;
+    }
+
+    function isVideoTextureSource(src, type) {
+      if (String(type || '').toLowerCase() === 'video') return true;
+      return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(String(src || ''));
+    }
+
+    function setCover(src, type){
+      src = String(src || '');
+      type = String(type || '');
+      var key = type + '|' + src;
+      if (key === coverSrc) return;
+      coverSrc = key;
+      disposeCoverMedia();
+      if (!src || !hasWebgl) {
+        useFallbackCoverTexture();
+        return;
+      }
+      if (isVideoTextureSource(src, type)) {
+        var video = document.createElement('video');
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.crossOrigin = 'anonymous';
+        video.preload = 'auto';
+        video.src = src;
+        coverVideo = video;
+        var applyVideoTexture = function(){
+          if (coverVideo !== video || coverSrc !== key) return;
+          var tex = new THREE.VideoTexture(video);
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.wrapS = THREE.ClampToEdgeWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          if (coverTexture && coverTexture.dispose) coverTexture.dispose();
+          coverTexture = tex;
+          if (uniforms) uniforms.uCover.value = tex;
+          video.play().catch(function(){});
+        };
+        video.addEventListener('loadeddata', applyVideoTexture, { once:true });
+        video.addEventListener('error', function(){
+          if (coverVideo === video) useFallbackCoverTexture();
+        }, { once:true });
+        video.load();
+        video.play().catch(function(){});
+        return;
+      }
+      var loader = new THREE.TextureLoader();
+      loader.setCrossOrigin('anonymous');
+      loader.load(src, function(tex) {
+        if (coverSrc !== key) return;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        if (coverTexture && coverTexture.dispose) coverTexture.dispose();
+        coverTexture = tex;
+        if (uniforms) uniforms.uCover.value = tex;
+      }, undefined, function() {
+        if (coverSrc === key) useFallbackCoverTexture();
+      });
+    }
+
+    function applyState(next){
+      next = next || {};
+      state = Object.assign({}, state, next);
+      state.colors = Object.assign({}, state.colors, next.colors || {});
+      state.motion = Object.assign({}, state.motion, next.motion || {});
+      state.lyric = Object.assign({}, state.lyric, next.lyric || {});
+      state.visual = Object.assign({}, state.visual, next.visual || {});
+      if (uniforms) {
+        var preset = Number(state.preset);
+        var visual = state.visual || {};
+        uniforms.uPrimary.value.copy(colorVec(state.colors.primary, '#d6f8ff'));
+        uniforms.uSecondary.value.copy(colorVec(state.colors.secondary, '#9cffdf'));
+        uniforms.uHighlight.value.copy(colorVec(state.colors.highlight, '#fff0b8'));
+        uniforms.uGlow.value.copy(colorVec(state.colors.glow, '#9cffdf'));
+        uniforms.uPreset.value = isFinite(preset) ? Math.max(0, Math.min(7, preset)) : 5;
+        uniforms.uIntensity.value = clamp(visual.intensity == null ? 1 : visual.intensity, .2, 1.8);
+        uniforms.uPointScale.value = clamp(visual.point == null ? 1 : visual.point, .5, 2.4);
+        uniforms.uDepth.value = clamp(visual.depth == null ? 1 : visual.depth, .2, 1.8);
+        uniforms.uSpeed.value = clamp(visual.speed == null ? 1 : visual.speed, .18, 2.8);
+        uniforms.uBloom.value = clamp(visual.bloom === false ? 0 : (visual.bloomStrength == null ? .35 : visual.bloomStrength), 0, 1.8);
+        uniforms.uScatter.value = clamp(visual.scatter == null ? .08 : visual.scatter, 0, .55);
+        uniforms.uPlaying.value = state.playing ? 1 : 0;
+      }
+      setCover(state.texture || state.cover || '', state.textureType || '');
+      updateWallpaperBackground();
+    }
+
+    function updateWallpaperBackground() {
+      if (!bgEl) return;
+      bgEl.style.display = 'none';
+      bgEl.style.backgroundImage = 'none';
+      bgEl.style.backgroundColor = 'transparent';
+    }
+
+    function updateLyrics(motionOverride) {
+      if (!lyricEl || !lyricFill) return;
+      var lyric = state.lyric || {};
+      var text = String(lyric.text || '').trim();
+      var enabled = lyric.enabled !== false && text;
+      lyricEl.classList.toggle('show', !!enabled);
+      if (!enabled) return;
+      var colors = state.colors || {};
+      var motion = motionOverride || state.motion || {};
+      var progress = clamp(lyric.progress, 0, 1);
+      var beat = clamp(Math.max(Number(motion.beat) || 0, Number(motion.energy) || 0), 0, 1.4);
+      var glow = clamp((Number(motion.treble) || 0) * 0.45 + beat * 0.78, 0, 1.4);
+      if (lyricFill.textContent !== text) lyricFill.textContent = text;
+      lyricEl.style.setProperty('--lyric-progress', (progress * 100).toFixed(2) + '%');
+      lyricEl.style.setProperty('--lyric-base', cssRgba(colors.primary || '#ffffff', 0.78));
+      lyricEl.style.setProperty('--lyric-hi', colors.highlight || '#fff0b8');
+      lyricEl.style.setProperty('--lyric-glow-color', cssRgba(colors.glow || '#9cffdf', 0.54 + Math.min(0.28, glow * 0.16)));
+      lyricEl.style.setProperty('--lyric-glow', glow.toFixed(3));
+      lyricEl.style.setProperty('--lyric-scale', (1 + beat * 0.018).toFixed(4));
+      lyricEl.style.setProperty('--lyric-alpha', (0.82 + Math.min(0.16, glow * 0.06)).toFixed(3));
+    }
+
+    function drawFallback(nowMs) {
+      fallback.style.display = 'block';
+      canvas.style.display = 'none';
+      updateLyrics();
+      var dpr = Math.min(1.25, window.devicePixelRatio || 1);
+      var w = fallback.width / dpr;
+      var h = fallback.height / dpr;
+      fctx.setTransform(dpr,0,0,dpr,0,0);
+      var colors = state.colors || {};
+      var m = state.motion || {};
+      var beat = clamp(m.beat, 0, 1.4);
+      var bass = clamp(m.bass, 0, 1.2);
+      var now = nowMs * .001;
+      fctx.globalCompositeOperation = 'source-over';
+      fctx.clearRect(0,0,w,h);
+      fctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < 760; i++) {
+        var a = rand(i) * 6.28318 + now * (.018 + rand(i * 4) * .03);
+        var r = (.12 + rand(i * 3) * .84) * Math.min(w,h) * (.46 + bass * .06);
+        var x = w * .5 + Math.cos(a) * r * w / Math.min(w,h);
+        var y = h * .5 + Math.sin(a * (0.8 + rand(i * 7) * .4)) * r;
+        var tw = Math.pow(.5 + .5 * Math.sin(now * (.6 + rand(i * 5)) + i), 4);
+        fctx.globalAlpha = (.035 + tw * .15 + beat * .05) * clamp(state.opacity, .35, 1);
+        fctx.fillStyle = tw > .72 ? (colors.highlight || '#fff0b8') : (colors.secondary || '#9cffdf');
+        fctx.beginPath();
+        fctx.arc(x,y,.8 + rand(i * 9) * 2.6 + beat * 2.5,0,Math.PI*2);
+        fctx.fill();
+      }
+    }
+
+    function draw(nowMs){
+      var frameMs = state.playing ? 33 : 50;
+      if (lastRenderAt && nowMs - lastRenderAt < frameMs) {
+        requestAnimationFrame(draw);
+        return;
+      }
+      lastRenderAt = nowMs;
+      var dt = Math.min(0.08, Math.max(0.001, (nowMs - lastNow) / 1000));
+      lastNow = nowMs;
+      if (!hasWebgl || !renderer) {
+        drawFallback(nowMs);
+        requestAnimationFrame(draw);
+        return;
+      }
+      fallback.style.display = 'none';
+      canvas.style.display = 'block';
+      var m = state.motion || {};
+      var decay = state.playing ? 1 : 0.45;
+      var attack = Math.min(1, dt * 14);
+      var release = Math.min(1, dt * 4.5);
+      function smooth(key, max) {
+        var idle = key === 'bass' ? 0.10 : (key === 'mid' ? 0.07 : (key === 'treble' ? 0.08 : (key === 'beat' ? 0.04 : 0.09)));
+        var target = Math.max(idle, clamp(m[key], 0, max) * decay);
+        var prev = smoothMotion[key] || 0;
+        smoothMotion[key] = prev + (target - prev) * (target > prev ? attack : release);
+      }
+      smooth('bass', 1.2);
+      smooth('mid', 1.0);
+      smooth('treble', 1.0);
+      smooth('beat', 1.4);
+      smooth('energy', 1.4);
+      updateLyrics(smoothMotion);
+      var opacity = clamp(state.opacity, .35, 1);
+      uniforms.uTime.value = nowMs * .001;
+      uniforms.uOpacity.value = opacity;
+      uniforms.uPlaying.value = state.playing ? 1 : 0;
+      uniforms.uMotion.value.set(
+        smoothMotion.bass,
+        smoothMotion.mid,
+        smoothMotion.treble,
+        Math.max(smoothMotion.beat, smoothMotion.energy * 0.35)
+      );
+      points.rotation.z = Math.sin(nowMs * .00008) * 0.018;
+      points.position.z = -smoothMotion.bass * 0.28;
+      glowPoints.rotation.z = points.rotation.z * -0.62;
+      glowPoints.material.uniforms.uOpacity.value = opacity * (0.48 + smoothMotion.beat * 0.30 + smoothMotion.bass * 0.18);
+      renderer.clear();
+      renderer.render(scene, camera);
+      requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    if (!initThree()) {
+      fallback.style.display = 'block';
+      canvas.style.display = 'none';
+      resize();
+    }
+    if (window.desktopOverlay && window.desktopOverlay.onWallpaperState) {
+      window.desktopOverlay.onWallpaperState(applyState);
+    }
+    updateWallpaperBackground();
+    requestAnimationFrame(draw);
+  </script>
+</body>
+</html>

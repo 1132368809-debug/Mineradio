@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mineradio Tray</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 340px;
+      min-height: 0;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.86);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+      user-select: none;
+    }
+
+    body {
+      display: block;
+      padding: 8px;
+    }
+
+    button {
+      border: 0;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .panel {
+      width: 324px;
+      height: auto;
+      display: grid;
+      grid-template-rows: 82px 58px 1px 52px 1px auto;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 82% 10%, rgba(0, 245, 212, 0.13), transparent 34%),
+        radial-gradient(circle at 20% 0%, rgba(255, 122, 144, 0.10), transparent 38%),
+        linear-gradient(180deg, rgba(20, 22, 30, 0.86), rgba(8, 10, 15, 0.90));
+      box-shadow: 0 22px 64px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+      backdrop-filter: blur(28px) saturate(1.18);
+      -webkit-backdrop-filter: blur(28px) saturate(1.18);
+    }
+
+    .transport {
+      display: grid;
+      grid-template-columns: 1fr 66px 1fr;
+      align-items: center;
+      justify-items: center;
+      min-width: 0;
+      height: 82px;
+      padding: 12px 50px 8px;
+    }
+
+    .round {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 50%;
+      color: rgba(255, 255, 255, 0.74);
+      background: rgba(255, 255, 255, 0.045);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    .round.small {
+      width: 38px;
+      height: 38px;
+    }
+
+    .round:hover {
+      color: #fff;
+      border-color: rgba(0, 245, 212, 0.34);
+      background: rgba(255, 255, 255, 0.09);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+
+    .round:active {
+      transform: scale(0.95);
+    }
+
+    .round.primary {
+      width: 56px;
+      height: 56px;
+      border-color: rgba(255, 255, 255, 0.22);
+      background: radial-gradient(circle at 50% 18%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 62%, rgba(0,245,212,0.06));
+      color: #fff;
+      box-shadow: inset 0 0 2px 1px rgba(255,255,255,.22), inset 0 0 14px rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.34);
+    }
+
+    .icon {
+      display: block;
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+      stroke: currentColor;
+    }
+
+    .icon.large {
+      width: 25px;
+      height: 25px;
+    }
+
+    .song {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) 36px;
+      align-items: center;
+      min-width: 0;
+      height: 58px;
+      padding: 0 18px 6px;
+    }
+
+    .song-main {
+      min-width: 0;
+      padding: 0 10px;
+    }
+
+    .title {
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.93);
+      font-size: 17px;
+      line-height: 22px;
+      font-weight: 760;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .artist {
+      overflow: hidden;
+      margin-top: 3px;
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 12px;
+      line-height: 16px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .heart {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      color: rgba(255, 255, 255, 0.50);
+      border-radius: 50%;
+    }
+
+    .heart.active {
+      color: #ff7a90;
+    }
+
+    .ghost {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      color: rgba(255, 255, 255, 0.58);
+      border-radius: 50%;
+    }
+
+    .ghost:hover,
+    .heart:hover {
+      background: rgba(255, 255, 255, 0.075);
+    }
+
+    .divider {
+      height: 1px;
+      min-height: 1px;
+      background: rgba(255, 255, 255, 0.075);
+    }
+
+    .volume {
+      display: grid;
+      grid-template-columns: 34px minmax(92px, 1fr) 42px 42px;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      height: 52px;
+      padding: 0 18px;
+    }
+
+    .volume-slider {
+      width: 100%;
+      height: 24px;
+      margin: 0;
+      accent-color: #00f5d4;
+      cursor: default;
+      -webkit-appearance: none;
+      background: transparent;
+    }
+
+    .volume-slider::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(0,245,212,.82) 0%, rgba(0,245,212,.82) var(--volume-pct, 100%), rgba(255,255,255,.13) var(--volume-pct, 100%), rgba(255,255,255,.13) 100%);
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      width: 14px;
+      height: 14px;
+      margin-top: -5px;
+      border: 0;
+      border-radius: 50%;
+      background: #eafffb;
+      box-shadow: 0 1px 8px rgba(0,245,212,0.35);
+      -webkit-appearance: none;
+    }
+
+    .volume-slider:focus {
+      outline: none;
+    }
+
+    .mini {
+      display: grid;
+      place-items: center;
+      height: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      color: rgba(255,255,255,.72);
+      background: rgba(255,255,255,0.045);
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .mini:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(0,245,212,.28);
+    }
+
+    .list {
+      min-height: 0;
+      overflow: hidden;
+      padding: 7px 0 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr) 28px;
+      align-items: center;
+      height: 39px;
+      width: 100%;
+      color: rgba(255,255,255,.72);
+      text-align: left;
+    }
+
+    .row:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.065);
+    }
+
+    .row-icon {
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      color: rgba(255,255,255,.42);
+    }
+
+    .row-label {
+      overflow: hidden;
+      min-width: 0;
+      font-size: 14.5px;
+      line-height: 20px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row.active {
+      color: #eafffb;
+      background: rgba(0, 245, 212, 0.08);
+    }
+
+    .row.active .row-icon,
+    .row.active .state-dot {
+      color: #00f5d4;
+    }
+
+    .state-dot {
+      justify-self: center;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      color: transparent;
+    }
+
+    .spacer {
+      height: 5px;
+    }
+
+    .danger {
+      color: rgba(255, 154, 165, 0.82);
+    }
+
+    .danger .row-icon {
+      color: rgba(255, 154, 165, 0.76);
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <section class="transport" aria-label="播放控制">
+      <button class="round small" type="button" data-action="prevTrack" title="上一首">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6z"></path><path d="M19 6.5v11L10 12z"></path></svg>
+      </button>
+      <button id="playButton" class="round primary" type="button" data-action="togglePlay" title="播放/暂停"></button>
+      <button class="round small" type="button" data-action="nextTrack" title="下一首">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2z"></path><path d="M5 17.5v-11l9 5.5z"></path></svg>
+      </button>
+    </section>
+
+    <section class="song">
+      <button id="likeButton" class="heart" type="button" data-action="toggleLike" title="喜欢">
+        <svg class="icon large" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.6l-1.3-1.1C5.9 15.3 3 12.8 3 9.2 3 6.3 5.3 4 8.2 4c1.6 0 3.2.8 4.1 2 1-1.2 2.5-2 4.1-2C19.3 4 21.6 6.3 21.6 9.2c0 3.6-2.9 6.1-7.7 10.3z"></path></svg>
+      </button>
+      <div class="song-main">
+        <div id="songTitle" class="title">Mineradio</div>
+        <div id="songArtist" class="artist">未播放</div>
+      </div>
+      <button class="ghost" type="button" data-action="open" title="打开 Mineradio">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v2H5zM5 11h14v2H5zM5 16h14v2H5z"></path></svg>
+      </button>
+    </section>
+
+    <div class="divider"></div>
+
+    <section class="volume" aria-label="音量">
+      <div class="row-icon">
+        <svg class="icon large" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="none" stroke-width="2" stroke-linejoin="round"></path><path d="M16 8.5a5 5 0 0 1 0 7" fill="none" stroke-width="2" stroke-linecap="round"></path></svg>
+      </div>
+      <input id="trayVolumeSlider" class="volume-slider" type="range" min="0" max="1" step="0.01" value="1" aria-label="音量">
+      <button class="mini" type="button" data-action="volumeDown" title="音量减">-</button>
+      <button class="mini" type="button" data-action="volumeUp" title="音量加">+</button>
+    </section>
+
+    <div class="divider"></div>
+
+    <section class="list">
+      <button id="lyricsRow" class="row" type="button" data-action="toggleDesktopLyrics">
+        <span class="row-icon">词</span>
+        <span class="row-label">显示桌面歌词</span>
+        <span class="state-dot"></span>
+      </button>
+      <button id="wallpaperRow" class="row" type="button" data-action="toggleWallpaperMode">
+        <span class="row-icon">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H14l1 2h2v1H7v-1h2l1-2H6.5A2.5 2.5 0 0 1 4 14.5z" fill="none" stroke-width="1.8"></path></svg>
+        </span>
+        <span class="row-label">动态桌面</span>
+        <span class="state-dot"></span>
+      </button>
+      <button class="row" type="button" data-action="openSettings">
+        <span class="row-icon">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z" fill="none" stroke-width="1.8"></path><path d="M19 13.2v-2.4l-2.1-.6a7 7 0 0 0-.7-1.6l1.1-1.9-1.7-1.7-1.9 1a7 7 0 0 0-1.7-.7L11.5 3H9.1l-.6 2.1a7 7 0 0 0-1.6.7L5 4.7 3.3 6.4l1 1.9a7 7 0 0 0-.7 1.7L1.5 10.5v2.4l2.1.6c.2.6.4 1.1.7 1.6l-1.1 1.9 1.7 1.7 1.9-1c.5.3 1.1.5 1.7.7l.6 2.1h2.4l.6-2.1c.6-.2 1.1-.4 1.7-.7l1.9 1 1.7-1.7-1.1-1.9c.3-.5.5-1 .7-1.6z" fill="none" stroke-width="1.4" stroke-linejoin="round"></path></svg>
+        </span>
+        <span class="row-label">设置</span>
+        <span></span>
+      </button>
+
+      <div class="spacer"></div>
+      <div class="divider"></div>
+
+      <button id="mainVisibilityRow" class="row" type="button" data-action="open">
+        <span id="mainVisibilityIcon" class="row-icon">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z" fill="none" stroke-width="1.8"></path><path d="M8 16l8-8M10 8h6v6" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </span>
+        <span id="mainVisibilityLabel" class="row-label">打开 Mineradio</span>
+        <span></span>
+      </button>
+      <button class="row danger" type="button" data-action="exit">
+        <span class="row-icon">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </span>
+        <span class="row-label">退出 Mineradio</span>
+        <span></span>
+      </button>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var playButton = document.getElementById('playButton');
+      var likeButton = document.getElementById('likeButton');
+      var lyricsRow = document.getElementById('lyricsRow');
+      var wallpaperRow = document.getElementById('wallpaperRow');
+      var mainVisibilityRow = document.getElementById('mainVisibilityRow');
+      var mainVisibilityIcon = document.getElementById('mainVisibilityIcon');
+      var mainVisibilityLabel = document.getElementById('mainVisibilityLabel');
+      var songTitle = document.getElementById('songTitle');
+      var songArtist = document.getElementById('songArtist');
+      var volumeSlider = document.getElementById('trayVolumeSlider');
+      var draggingVolume = false;
+
+      var playSvg = '<svg class="icon large" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"></path></svg>';
+      var pauseSvg = '<svg class="icon large" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.8v14H7zM13.2 5H17v14h-3.8z"></path></svg>';
+      var openSvg = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z" fill="none" stroke-width="1.8"></path><path d="M8 16l8-8M10 8h6v6" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+      var hideSvg = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" fill="none" stroke-width="2" stroke-linecap="round"></path></svg>';
+
+      function setActive(el, active) {
+        if (!el) return;
+        el.classList.toggle('active', !!active);
+      }
+
+      function clampVolume(value) {
+        var n = Number(value);
+        if (!isFinite(n)) return 1;
+        return Math.max(0, Math.min(1, n));
+      }
+
+      function renderVolume(value) {
+        if (!volumeSlider || draggingVolume) return;
+        var volume = clampVolume(value);
+        volumeSlider.value = String(volume);
+        volumeSlider.style.setProperty('--volume-pct', Math.round(volume * 100) + '%');
+        volumeSlider.title = '音量 ' + Math.round(volume * 100) + '%';
+      }
+
+      function requestContentResize() {
+        if (!window.trayMenu || typeof window.trayMenu.resizeToContent !== 'function') return;
+        requestAnimationFrame(function () {
+          var panel = document.querySelector('.panel');
+          var height = Math.ceil((panel ? panel.offsetHeight : document.body.scrollHeight) + 16);
+          window.trayMenu.resizeToContent(height).catch(function (err) {
+            console.error('Tray menu resize failed:', err);
+          });
+        });
+      }
+
+      function render(state) {
+        state = state || {};
+        var title = String(state.title || '').trim();
+        var artist = String(state.artist || '').trim();
+        songTitle.textContent = title || 'Mineradio';
+        songArtist.textContent = artist || (title ? '正在播放' : '未播放');
+        playButton.innerHTML = state.playing ? pauseSvg : playSvg;
+        playButton.title = state.playing ? '暂停' : '播放';
+        setActive(likeButton, state.liked);
+        setActive(lyricsRow, state.desktopLyrics);
+        setActive(wallpaperRow, state.wallpaperMode);
+        if (mainVisibilityRow) {
+          var visible = !!state.mainVisible;
+          mainVisibilityRow.setAttribute('data-action', visible ? 'hide' : 'open');
+          mainVisibilityRow.title = visible ? '隐藏到后台' : '打开 Mineradio';
+          if (mainVisibilityLabel) mainVisibilityLabel.textContent = visible ? '隐藏到后台' : '打开 Mineradio';
+          if (mainVisibilityIcon) mainVisibilityIcon.innerHTML = visible ? hideSvg : openSvg;
+        }
+        renderVolume(state.volume);
+        requestContentResize();
+      }
+
+      function runAction(action) {
+        if (!window.trayMenu || !action) return;
+        window.trayMenu.action(action).catch(function (err) {
+          console.error('Tray menu action failed:', err);
+        });
+      }
+
+      document.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-action]');
+        if (!button) return;
+        runAction(button.getAttribute('data-action'));
+      });
+
+      if (volumeSlider) {
+        volumeSlider.addEventListener('pointerdown', function () {
+          draggingVolume = true;
+        });
+        volumeSlider.addEventListener('pointerup', function () {
+          draggingVolume = false;
+        });
+        volumeSlider.addEventListener('input', function () {
+          var volume = clampVolume(volumeSlider.value);
+          volumeSlider.style.setProperty('--volume-pct', Math.round(volume * 100) + '%');
+          volumeSlider.title = '音量 ' + Math.round(volume * 100) + '%';
+          if (window.trayMenu) {
+            window.trayMenu.action({ action: 'setVolume', volume: volume }).catch(function (err) {
+              console.error('Tray volume action failed:', err);
+            });
+          }
+        });
+        volumeSlider.addEventListener('change', function () {
+          draggingVolume = false;
+        });
+      }
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && window.trayMenu) {
+          window.trayMenu.close();
+        }
+      });
+
+      if (window.trayMenu) {
+        window.trayMenu.getState().then(render).catch(function () {
+          render({});
+        });
+        window.trayMenu.onState(render);
+      } else {
+        render({});
+      }
+      requestContentResize();
+    })();
+  </script>
+</body>
+</html>
