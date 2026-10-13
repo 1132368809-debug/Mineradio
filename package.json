@@ -25,6 +25,9 @@
     },
     "files": [
       "desktop/**/*",
+      "!desktop/native-*/bin/**/*",
+      "!desktop/native-*/obj/**/*",
+      "!desktop/native-*/*-capture.png",
       "public/**/*",
       "build/**/*",
       "beatmap-cache-policy.js",
